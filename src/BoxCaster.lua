@@ -1,5 +1,3 @@
--- still doesn't work properly
-
 local hitboxClass = require(script.Parent)
 local runService = game:GetService("RunService")
 local isServer = runService:IsServer()
@@ -28,29 +26,25 @@ local function Distance(position1, position2)
 	return (position1 - position2).Magnitude
 end
 
-local function DistanceCheck(self, origin, list)
+local function DistanceCheck(self, origin, newPosition, list, realOrigin)
 	if #list > 0 then
 		rayParams.FilterDescendantsInstances = list
 		
-		local closest = nil
-		local closestPosition = nil
+		local closestPosition = newPosition
+		local closestDistance = 50
+		local length = (origin - newPosition).Magnitude
+		local size = Vector3.new(self.Size.X, self.Size.Y, 0.1)
 		
 		table.sort(list, function(part1, part2)
 			return Distance(part1.Position, origin) < Distance(part2.Position, origin)
 		end)
 		
-		for i = 1, self.MaxTouch do
-			local part = list[i]
-			
-			if not part then break end
-			
-			local distance = (part.Position - origin).Magnitude
-			local result = workspace:Raycast(origin, part.Position - origin, rayParams)
+		for i, part in list do
+			local result = workspace:Blockcast(CFrame.new(realOrigin), size, newPosition - realOrigin, rayParams) -- needs a better method
 			
 			if result and self:Validate(part) then
-				
-				if not closest and result then
-					closest = part
+				if (result.Position - closestPosition).Magnitude < closestDistance then
+					closestDistance = (result.Position - closestPosition).Magnitude
 					
 					closestPosition = result.Position
 				end
@@ -58,9 +52,9 @@ local function DistanceCheck(self, origin, list)
 				local model = part:FindFirstAncestorWhichIsA("Model")
 				local humanoid = model and model:FindFirstChildWhichIsA("Humanoid")
 				
-				if model ~= workspace then -- filter baseplate method when
+				if model ~= workspace or not self.IgnoreNonHumanoids then -- filter baseplate method when
 					self:Tag(model)
-				end	
+				end
 				
 				self.TouchedParts += 1
 				self.Signal:Fire(part, humanoid, result.Position)
@@ -71,7 +65,6 @@ local function DistanceCheck(self, origin, list)
 
 					return
 				end
-
 			end
 		end
 		
@@ -85,9 +78,7 @@ local function StraightLine(self, oldAlpha, newAlpha)
 	local direction = newPosition - origin
 	local list = self:DrawBox(origin, newPosition, self.Size)
 	
-	--local boxcast = DistanceCheck(self, origin, newPosition, list)
-	
-	return DistanceCheck(self, origin, list) or (origin + direction)
+	return DistanceCheck(self, origin, newPosition, list, self.Start) or (origin + direction)
 end
 
 function boxCaster.new(info)
@@ -100,7 +91,8 @@ function boxCaster.new(info)
 	
 	self.Segments = info.Segments or math.floor((info.Start - info.Goal).Magnitude / 10)
 	self.Size = info.Size or Vector2.new(1, 1)
-	self.MaxTouch = info.MaxTouch or 1
+	self.MaxTouch = info.MaxTouch-- or 1
+	self.IgnoreNonHumanoids = info.IgnoreNonHumanoids
 
 	return setmetatable(self, boxCaster)
 end
@@ -127,24 +119,6 @@ function boxCaster:DrawBox(start, goal, size)
 	return workspace:GetPartsInPart(part, boxParams)
 end
 
---[[function boxCaster:DrawDebug(start, goal)
-	if self.DebugParts[1] then self.DebugParts[1]:Destroy() end
-	
-	local direction = (start - goal)
-
-	local debugPart = Instance.new("Part")
-	debugPart.CFrame = CFrame.lookAt(start, goal) + direction * 0.5
-	debugPart.Size = Vector3.new(self.Size.X, self.Size.Y, direction.Magnitude)
-	debugPart.Anchored = true
-	debugPart.CanCollide = false
-	debugPart.Color = Color3.new(0, 1, 0)
-	debugPart.Material = Enum.Material.Neon
-	debugPart.Transparency = 1--if debugMode then 0.5 else 1
-	debugPart.Parent = debugFolder
-	
-	self.DebugParts[1] = debugPart
-end]]
-
 function boxCaster:DestroyPart()
 	if self.Part then
 		self.Part:Destroy()
@@ -157,30 +131,6 @@ end
 
 function boxCaster:Boxcast(oldAlpha, newAlpha)
 	local endPosition = StraightLine(self, oldAlpha, newAlpha)
-	
-	--[[for i = 1, self.MaxTouch do
-		local position, boxcast = StraightLine(self, oldAlpha, newAlpha)
-
-		if boxcast and boxcast.Instance then
-			--print(boxcast.Instance, boxcast.Instance.Parent)
-			local part = boxcast.Instance
-			local model = part:FindFirstAncestorWhichIsA("Model")
-			local humanoid = model and model:FindFirstChildWhichIsA("Humanoid")
-
-			self.TouchedParts += 1
-			self:Tag(model)
-			self.Signal:Fire(part, humanoid, boxcast.Position)
-
-			if self:HasReachedMaxTouch() then
-				self:Deactivate()
-				task.defer(self.Destroy, self)
-				
-				return
-			end
-
-			return boxcast.Position
-		end
-	end]]
 	
 	return endPosition
 end
@@ -226,8 +176,6 @@ step:Connect(function()
 		end
 
 		local position = self:Boxcast(oldAlpha, newAlpha)
-		
-		--self:DrawDebug(self.Start:Lerp(self.Goal, oldAlpha), position)
 		
 		if self.Part and position then
 			self:PivotTo(CFrame.lookAt(position, self.Goal))
