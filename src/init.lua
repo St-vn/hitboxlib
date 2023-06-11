@@ -3,10 +3,6 @@ hitboxClass.__index = hitboxClass
 
 local signalClass = require(script.Parent.Signal)
 
-local rayParams = RaycastParams.new()
-rayParams.FilterDescendantsInstances = {}
-rayParams.FilterType = Enum.RaycastFilterType.Whitelist
-
 function hitboxClass.new(part)
 	return setmetatable({
 		Part = part,
